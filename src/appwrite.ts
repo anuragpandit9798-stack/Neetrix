@@ -10,7 +10,7 @@ const getStoredConfig = () => {
 
   return {
     endpoint: customEndpoint || import.meta.env.VITE_APPWRITE_ENDPOINT || 'https://sgp.cloud.appwrite.io/v1',
-    projectId: customProject || import.meta.env.VITE_APPWRITE_PROJECT_ID || '6a3f9f56000c2f5e57df',
+    projectId: customProject || import.meta.env.VITE_APPWRITE_PROJECT_ID || '6a401b750029d96ec953',
     databaseId: customDb || import.meta.env.VITE_APPWRITE_DATABASE_ID || 'neet_tracker',
     collectionId: customColl || import.meta.env.VITE_APPWRITE_COLLECTION_ID || 'daily_logs',
   };
