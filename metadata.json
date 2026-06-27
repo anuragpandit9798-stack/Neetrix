@@ -1,0 +1,6 @@
+{
+  "name": "NEET Tracker Pro",
+  "description": "A comprehensive preparation tracker for NEET aspirants, featuring study timers, dynamic checklists, target trackers, and an error notebook.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
