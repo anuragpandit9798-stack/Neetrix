@@ -74,6 +74,7 @@ export default function App() {
   const [showCelebration, setShowCelebration] = useState(false);
   const [submittedToday, setSubmittedToday] = useState(false);
   const [lastSubmittedHours, setLastSubmittedHours] = useState(0);
+  const [inputValue, setInputValue] = useState<string>('0');
 
   // Sync / query from Appwrite databases helper
   const syncFromAppwrite = async (userId: string) => {
@@ -152,7 +153,9 @@ export default function App() {
         const loggedToday = parsedLogs.find((l) => l.id === todayStr);
         if (loggedToday) {
           setSubmittedToday(true);
-          setLastSubmittedHours(typeof loggedToday.studyHours === 'number' ? loggedToday.studyHours : (parseFloat(loggedToday.studyHours as any) || 0));
+          const hrs = typeof loggedToday.studyHours === 'number' ? loggedToday.studyHours : (parseFloat(loggedToday.studyHours as any) || 0);
+          setLastSubmittedHours(hrs);
+          setInputValue(hrs.toString());
           setMorningStudy(loggedToday.morningStudy);
           setDiscipline(loggedToday.discipline);
           setDailyPractice(loggedToday.dailyPractice);
@@ -161,6 +164,7 @@ export default function App() {
         } else {
           setSubmittedToday(false);
           setLastSubmittedHours(0);
+          setInputValue('0');
         }
       }
     } catch (err: any) {
@@ -196,7 +200,9 @@ export default function App() {
         const loggedToday = parsedLogs.find((l) => l.id === todayStr);
         if (loggedToday) {
           setSubmittedToday(true);
-          setLastSubmittedHours(typeof loggedToday.studyHours === 'number' ? loggedToday.studyHours : (parseFloat(loggedToday.studyHours as any) || 0));
+          const hrs = typeof loggedToday.studyHours === 'number' ? loggedToday.studyHours : (parseFloat(loggedToday.studyHours as any) || 0);
+          setLastSubmittedHours(hrs);
+          setInputValue(hrs.toString());
           
           // Populate the checklists with today's already submitted values for inspection/update
           setMorningStudy(loggedToday.morningStudy);
@@ -396,6 +402,11 @@ export default function App() {
 
   const handleTimeLogged = (seconds: number) => {
     setAccumulatedSeconds((prev) => prev + seconds);
+    const hrsToAdd = seconds / 3600;
+    setInputValue((current) => {
+      const parsed = parseFloat(current) || 0;
+      return parseFloat((parsed + hrsToAdd).toFixed(2)).toString();
+    });
   };
 
   // Reset tracker state
@@ -407,6 +418,7 @@ export default function App() {
       setClassActivity(INITIAL_CLASS);
       setNightRevision(INITIAL_NIGHT_REVISION);
       setAccumulatedSeconds(0);
+      setInputValue('0');
     }
   };
 
@@ -415,13 +427,9 @@ export default function App() {
     const todayStr = getTodayString();
     const currentScore = calculateCompletionScore(morningStudy, discipline, classActivity, nightRevision);
     
-    // Get existing hours logged today to safely append (add) to them
-    const existingLogToday = logs.find((l) => l.id === todayStr);
-    const existingHours = existingLogToday ? (typeof existingLogToday.studyHours === 'number' ? existingLogToday.studyHours : parseFloat(existingLogToday.studyHours as any) || 0) : 0;
-
-    // Add logged hours from stopwatch
-    const newSecondsHours = accumulatedSeconds / 3600;
-    const studyHrsToday = parseFloat((existingHours + newSecondsHours).toFixed(2)) || 0;
+    // Convert to float safely from direct input, rounding to 1 decimal place as requested
+    const parsedHours = parseFloat(inputValue);
+    const studyHrsToday = isNaN(parsedHours) || parsedHours < 0 ? 0 : parseFloat(parsedHours.toFixed(1));
 
     const newLog: DailyLog = {
       id: todayStr,
@@ -443,6 +451,7 @@ export default function App() {
     saveLogs(finalLogsList);
     setSubmittedToday(true);
     setLastSubmittedHours(studyHrsToday);
+    setInputValue(studyHrsToday.toString());
     setShowCelebration(true);
     setAccumulatedSeconds(0); // clear accumulated timer as it is logged
 
@@ -837,6 +846,33 @@ export default function App() {
                     </p>
                   </div>
                 )}
+
+                <div className="border-t border-slate-850 my-4" />
+
+                {/* Direct Study Hours Input */}
+                <div className="mb-4 text-left">
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">
+                    Study Hours Today (Direct Input / Edit)
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      max="24"
+                      value={inputValue}
+                      onChange={(e) => setInputValue(e.target.value)}
+                      className="w-full bg-slate-950 border border-slate-850 text-cyan-400 font-mono font-bold text-sm px-3 py-2 rounded-lg focus:outline-none focus:border-cyan-500 text-center cursor-text"
+                      placeholder="0.0"
+                    />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-500 uppercase font-mono">
+                      Hrs
+                    </span>
+                  </div>
+                  <p className="text-[9px] text-slate-500 mt-1 leading-normal text-center">
+                    Type directly to override or let the study timer add to it.
+                  </p>
+                </div>
 
                 <div className="border-t border-slate-850 my-4" />
 
