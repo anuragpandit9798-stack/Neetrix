@@ -104,7 +104,7 @@ export default function App() {
         return {
           id: doc.$id || doc.date,
           date: doc.date,
-          studyHours: doc.hours || 0,
+          studyHours: typeof doc.hours === 'number' ? doc.hours : (parseFloat(doc.hours) || 0),
           morningStudy: {
             wakeUpOnTime: true,
             bioNcertDone: bMcq > 0,
@@ -152,7 +152,7 @@ export default function App() {
         const loggedToday = parsedLogs.find((l) => l.id === todayStr);
         if (loggedToday) {
           setSubmittedToday(true);
-          setLastSubmittedHours(loggedToday.studyHours);
+          setLastSubmittedHours(typeof loggedToday.studyHours === 'number' ? loggedToday.studyHours : (parseFloat(loggedToday.studyHours as any) || 0));
           setMorningStudy(loggedToday.morningStudy);
           setDiscipline(loggedToday.discipline);
           setDailyPractice(loggedToday.dailyPractice);
@@ -176,7 +176,12 @@ export default function App() {
     try {
       const savedLogs = localStorage.getItem('neet_tracker_logs');
       if (savedLogs) {
-        setLogs(JSON.parse(savedLogs));
+        const parsed: DailyLog[] = JSON.parse(savedLogs);
+        const cleanLogs = parsed.map((l) => ({
+          ...l,
+          studyHours: typeof l.studyHours === 'number' ? l.studyHours : (parseFloat(l.studyHours as any) || 0)
+        }));
+        setLogs(cleanLogs);
       }
 
       const savedErrors = localStorage.getItem('neet_tracker_errors');
@@ -191,7 +196,7 @@ export default function App() {
         const loggedToday = parsedLogs.find((l) => l.id === todayStr);
         if (loggedToday) {
           setSubmittedToday(true);
-          setLastSubmittedHours(loggedToday.studyHours);
+          setLastSubmittedHours(typeof loggedToday.studyHours === 'number' ? loggedToday.studyHours : (parseFloat(loggedToday.studyHours as any) || 0));
           
           // Populate the checklists with today's already submitted values for inspection/update
           setMorningStudy(loggedToday.morningStudy);
@@ -360,7 +365,10 @@ export default function App() {
   const getStats = (): TrackerStats => {
     const { streak, bestStreak, lastSubmitDate } = calculateStreakMetrics(logs);
     
-    const totalStudyHours = logs.reduce((sum, l) => sum + l.studyHours, 0) + (accumulatedSeconds / 3600);
+    const totalStudyHours = logs.reduce((sum, l) => {
+      const hrs = typeof l.studyHours === 'number' ? l.studyHours : (parseFloat(l.studyHours as any) || 0);
+      return sum + hrs;
+    }, 0) + (accumulatedSeconds / 3600);
     
     const totalMcqsSolved = logs.reduce(
       (sum, l) => sum + l.dailyPractice.bioMcqs + l.dailyPractice.physicsMcqs + l.dailyPractice.chemistryMcqs,
@@ -407,8 +415,13 @@ export default function App() {
     const todayStr = getTodayString();
     const currentScore = calculateCompletionScore(morningStudy, discipline, classActivity, nightRevision);
     
+    // Get existing hours logged today to safely append (add) to them
+    const existingLogToday = logs.find((l) => l.id === todayStr);
+    const existingHours = existingLogToday ? (typeof existingLogToday.studyHours === 'number' ? existingLogToday.studyHours : parseFloat(existingLogToday.studyHours as any) || 0) : 0;
+
     // Add logged hours from stopwatch
-    const studyHrsToday = accumulatedSeconds / 3600;
+    const newSecondsHours = accumulatedSeconds / 3600;
+    const studyHrsToday = parseFloat((existingHours + newSecondsHours).toFixed(2)) || 0;
 
     const newLog: DailyLog = {
       id: todayStr,
