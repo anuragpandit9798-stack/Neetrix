@@ -9,8 +9,8 @@ const getStoredConfig = () => {
   const customColl = localStorage.getItem('appwrite_custom_collection_id');
 
   return {
-    endpoint: customEndpoint || import.meta.env.VITE_APPWRITE_ENDPOINT || 'https://cloud.appwrite.io/v1',
-    projectId: customProject || import.meta.env.VITE_APPWRITE_PROJECT_ID || '667be5a0002b8d96b999', // elegant placeholder
+    endpoint: customEndpoint || import.meta.env.VITE_APPWRITE_ENDPOINT || 'https://sgp.cloud.appwrite.io/v1',
+    projectId: customProject || import.meta.env.VITE_APPWRITE_PROJECT_ID || '6a3f9f56000c2f5e57df',
     databaseId: customDb || import.meta.env.VITE_APPWRITE_DATABASE_ID || 'neet_tracker',
     collectionId: customColl || import.meta.env.VITE_APPWRITE_COLLECTION_ID || 'daily_logs',
   };
@@ -18,10 +18,24 @@ const getStoredConfig = () => {
 
 export const currentConfig = getStoredConfig();
 
-const client = new Client();
+export const client = new Client();
 client
   .setEndpoint(currentConfig.endpoint)
   .setProject(currentConfig.projectId);
+
+// Automatically add a ping method to verify connectivity as per the setup guide
+if (!(client as any).ping) {
+  (client as any).ping = async function () {
+    try {
+      const res = await fetch(currentConfig.endpoint);
+      console.log('Appwrite Ping verification status:', res.status);
+      return res;
+    } catch (err) {
+      console.error('Appwrite Ping verification failed:', err);
+      throw err;
+    }
+  };
+}
 
 export const account = new Account(client);
 export const databases = new Databases(client);

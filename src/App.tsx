@@ -6,7 +6,7 @@ import ChecklistSection from './components/ChecklistSection';
 import ErrorNotebook from './components/ErrorNotebook';
 import HistoryDashboard from './components/HistoryDashboard';
 import { Sparkles, ClipboardList, BookOpen, BarChart3, AlertCircle, RefreshCw, CheckCircle2, LogOut, Cloud, CloudOff, Info, Loader2 } from 'lucide-react';
-import { account, databases, currentConfig, Query, ID } from './appwrite';
+import { client, account, databases, currentConfig, Query, ID } from './appwrite';
 import LoginScreen from './components/LoginScreen';
 
 const INITIAL_MORNING_STUDY: MorningStudyState = {
@@ -220,6 +220,10 @@ export default function App() {
       }
 
       try {
+        // Auto-ping Appwrite backend to verify setup on app open as requested
+        if (typeof (client as any).ping === 'function') {
+          (client as any).ping().catch((pErr: any) => console.log('Appwrite auto-ping on startup failed (expected if local/unconfigured):', pErr));
+        }
         const currentUser = await account.get();
         setUser(currentUser);
         // Load cloud documents from databases
