@@ -565,7 +565,7 @@ export default function App() {
             alert('🎉 Backup data imported successfully!');
           }
         } else {
-          alert('Invalid backup format. Make sure you use a file previously exported from NEET Tracker Pro.');
+          alert('Invalid backup format. Make sure you use a file previously exported from Neetrix.');
         }
       } catch (err) {
         alert('Failed to parse the backup JSON. The file might be corrupted.');
@@ -635,7 +635,7 @@ export default function App() {
             </div>
             <div>
               <h1 className="text-xl font-bold uppercase tracking-widest text-white flex items-center gap-2">
-                NEET Tracker Pro <span className="text-[9px] bg-cyan-950/40 text-cyan-400 font-mono font-bold px-2 py-0.5 rounded-full border border-cyan-900/30">WORKSPACE</span>
+                Neetrix <span className="text-[9px] bg-cyan-950/40 text-cyan-400 font-mono font-bold px-2 py-0.5 rounded-full border border-cyan-900/30">WORKSPACE</span>
               </h1>
               <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mt-1">
                 Optimize daily focus, record conceptual practice, and eliminate syllabus errors.

@@ -111,7 +111,7 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
             <Sparkles className="w-6 h-6 animate-pulse" />
           </div>
           <h1 className="text-2xl font-black uppercase tracking-widest text-white">
-            NEET Tracker Pro
+            Neetrix
           </h1>
           <p className="text-[11px] text-slate-500 font-bold uppercase tracking-wider mt-1">
             Appwrite Cloud Student Workspace
