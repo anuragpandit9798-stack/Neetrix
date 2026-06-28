@@ -638,8 +638,11 @@ export default function App() {
     return (
       <LoginScreen
         onLoginSuccess={(u) => {
-          setUser(u);
-          syncFromSupabase(u.$id);
+          const mappedUser = u ? { ...u, $id: u.$id || u.id } : null;
+          setUser(mappedUser);
+          if (mappedUser) {
+            syncFromSupabase(mappedUser.$id);
+          }
         }}
       />
     );

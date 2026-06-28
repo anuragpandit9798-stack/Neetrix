@@ -46,6 +46,8 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
       let msg = err.message || '';
       if (msg.toLowerCase().includes('failed to fetch')) {
         msg = "Network Connection Error: 'Failed to fetch'. This typically means your custom Supabase URL/Key is invalid, offline, or blocking requests. Please verify settings under 'Custom Supabase Configuration' below, or choose 'Skip & Use Local Mode (Offline)'.";
+      } else if (msg.toLowerCase().includes('email not confirmed')) {
+        msg = "Email not confirmed! 📧 Please check your inbox for the Supabase verification link, or go to Supabase Dashboard > Authentication > Providers > Email and turn off 'Confirm email' to allow instant logins.";
       }
       setError(msg || 'Login failed. Please check your credentials or Supabase configuration.');
     } finally {
@@ -75,11 +77,14 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
       });
       if (signUpError) throw signUpError;
       
-      setSuccess('Account created successfully! Check your email for verification if needed, or you are ready to log in.');
+      const returnedUser = data.user || { id: 'temp_user', email };
+      const mappedUser = { ...returnedUser, $id: returnedUser.id };
+
+      setSuccess('Account created successfully! 📧 Check your inbox for the Supabase confirmation link (or log in directly if "Confirm email" is turned off in your project).');
 
       setTimeout(() => {
-        onLoginSuccess(data.user || { id: 'temp_user', email });
-      }, 1000);
+        onLoginSuccess(mappedUser);
+      }, 2500);
     } catch (err: any) {
       console.error(err);
       let msg = err.message || '';

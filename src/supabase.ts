@@ -27,7 +27,8 @@ const getStoredConfig = () => {
 export const currentConfig = getStoredConfig();
 
 // Safe fallback credentials so createClient doesn't crash on boot if they are empty or placeholder
-const targetUrl = currentConfig.isConfigured ? currentConfig.url : 'https://placeholder-project.supabase.co';
+const rawUrl = currentConfig.isConfigured ? currentConfig.url : 'https://placeholder-project.supabase.co';
+const targetUrl = rawUrl.replace(/\/rest\/v1\/?$/, '');
 const targetKey = currentConfig.isConfigured ? currentConfig.anonKey : 'placeholder-anon-key-placeholder-anon-key-placeholder-anon-key';
 
 // Create a single supabase client instance
