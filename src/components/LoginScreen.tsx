@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { account, createSession, currentConfig, updateAppwriteConfig, ID } from '../appwrite';
+import { supabase, currentConfig, updateSupabaseConfig } from '../supabase';
 import { Lock, Mail, Server, ShieldCheck, Sparkles, Key, HelpCircle, Loader2 } from 'lucide-react';
 
 interface LoginScreenProps {
@@ -15,10 +15,8 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
 
   // Advanced config state
   const [showConfig, setShowConfig] = useState(false);
-  const [endpoint, setEndpoint] = useState(currentConfig.endpoint);
-  const [projectId, setProjectId] = useState(currentConfig.projectId);
-  const [databaseId, setDatabaseId] = useState(currentConfig.databaseId);
-  const [collectionId, setCollectionId] = useState(currentConfig.collectionId);
+  const [supabaseUrl, setSupabaseUrl] = useState(currentConfig.url);
+  const [supabaseAnonKey, setSupabaseAnonKey] = useState(currentConfig.anonKey);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -32,23 +30,24 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
     setSuccess(null);
 
     try {
-      // Create session via our wrapper (supports Appwrite v13 and v14+)
-      await createSession(email, password);
+      const { data, error: signInError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+      if (signInError) throw signInError;
       
-      // Fetch user profile to confirm success
-      const user = await account.get();
       setSuccess('Successfully logged in! Opening workspace...');
       
       setTimeout(() => {
-        onLoginSuccess(user);
+        onLoginSuccess(data.user);
       }, 1000);
     } catch (err: any) {
       console.error(err);
       let msg = err.message || '';
       if (msg.toLowerCase().includes('failed to fetch')) {
-        msg = "Network Connection Error: 'Failed to fetch'. This typically means your custom Appwrite Endpoint is invalid, offline, or blocking requests due to missing CORS origins. Please verify settings under 'Custom Appwrite Configuration' below, or choose 'Skip & Use Local Mode (Offline)'.";
+        msg = "Network Connection Error: 'Failed to fetch'. This typically means your custom Supabase URL/Key is invalid, offline, or blocking requests. Please verify settings under 'Custom Supabase Configuration' below, or choose 'Skip & Use Local Mode (Offline)'.";
       }
-      setError(msg || 'Login failed. Please check your credentials or Appwrite endpoint configuration.');
+      setError(msg || 'Login failed. Please check your credentials or Supabase configuration.');
     } finally {
       setLoading(false);
     }
@@ -60,8 +59,8 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
       setError('Please fill in both email and password.');
       return;
     }
-    if (password.length < 8) {
-      setError('Password must be at least 8 characters long.');
+    if (password.length < 6) {
+      setError('Password must be at least 6 characters long.');
       return;
     }
 
@@ -70,22 +69,22 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
     setSuccess(null);
 
     try {
-      // Create Account
-      await account.create(ID.unique(), email, password);
-      setSuccess('Account created successfully! Logging you in...');
-
-      // Immediately log in after signup
-      await createSession(email, password);
-      const user = await account.get();
+      const { data, error: signUpError } = await supabase.auth.signUp({
+        email,
+        password,
+      });
+      if (signUpError) throw signUpError;
       
+      setSuccess('Account created successfully! Check your email for verification if needed, or you are ready to log in.');
+
       setTimeout(() => {
-        onLoginSuccess(user);
+        onLoginSuccess(data.user || { id: 'temp_user', email });
       }, 1000);
     } catch (err: any) {
       console.error(err);
       let msg = err.message || '';
       if (msg.toLowerCase().includes('failed to fetch')) {
-        msg = "Network Connection Error: 'Failed to fetch'. This typically means your custom Appwrite Endpoint is invalid, offline, or blocking requests due to missing CORS origins. Please verify settings under 'Custom Appwrite Configuration' below, or choose 'Skip & Use Local Mode (Offline)'.";
+        msg = "Network Connection Error: 'Failed to fetch'. This typically means your custom Supabase URL/Key is invalid, offline, or blocking requests. Please verify settings under 'Custom Supabase Configuration' below, or choose 'Skip & Use Local Mode (Offline)'.";
       }
       setError(msg || 'Signup failed. Email might already be in use or configuration is incorrect.');
     } finally {
@@ -95,7 +94,7 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
 
   const handleSaveConfig = (e: React.FormEvent) => {
     e.preventDefault();
-    updateAppwriteConfig(endpoint, projectId, databaseId, collectionId);
+    updateSupabaseConfig(supabaseUrl, supabaseAnonKey);
   };
 
   return (
@@ -114,7 +113,7 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
             Neetrix
           </h1>
           <p className="text-[11px] text-slate-500 font-bold uppercase tracking-wider mt-1">
-            Appwrite Cloud Student Workspace
+            Supabase Cloud Student Workspace
           </p>
         </div>
 
@@ -125,7 +124,7 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
               <ShieldCheck className="w-4 h-4" /> 🔐 Access Secure Vault
             </h2>
             <p className="text-[10px] text-slate-500 uppercase tracking-wide font-medium mt-1">
-              Sign up or log in to sync logs with Appwrite databases.
+              Sign up or log in to sync logs with Supabase databases.
             </p>
           </div>
 
@@ -215,14 +214,14 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
             </div>
           </form>
 
-          {/* Collapsible advanced Appwrite config */}
+          {/* Collapsible advanced Supabase config */}
           <div className="border-t border-slate-850 pt-4">
             <button
               onClick={() => setShowConfig(!showConfig)}
               className="text-[10px] font-bold text-slate-500 uppercase tracking-widest hover:text-slate-300 flex items-center gap-1.5 transition-colors focus:outline-none"
             >
               <Server className="w-3.5 h-3.5" />
-              {showConfig ? 'Hide Custom Appwrite Configuration' : 'Show Custom Appwrite Configuration'}
+              {showConfig ? 'Hide Custom Supabase Configuration' : 'Show Custom Supabase Configuration'}
             </button>
 
             {showConfig && (
@@ -233,53 +232,29 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
 
                 <div className="space-y-1">
                   <label className="text-[8px] font-bold text-slate-500 uppercase tracking-wider block">
-                    Appwrite Endpoint
+                    Supabase Project URL
                   </label>
                   <input
                     type="url"
-                    value={endpoint}
-                    onChange={(e) => setEndpoint(e.target.value)}
+                    value={supabaseUrl}
+                    onChange={(e) => setSupabaseUrl(e.target.value)}
                     className="w-full px-2.5 py-1.5 bg-slate-900 border border-slate-800 rounded-lg text-[10px] text-slate-300 focus:outline-none focus:border-cyan-500 font-mono"
                     required
+                    placeholder="https://xxxx.supabase.co"
                   />
                 </div>
 
                 <div className="space-y-1">
                   <label className="text-[8px] font-bold text-slate-500 uppercase tracking-wider block">
-                    Project ID
+                    Supabase Anon Key
                   </label>
                   <input
                     type="text"
-                    value={projectId}
-                    onChange={(e) => setProjectId(e.target.value)}
+                    value={supabaseAnonKey}
+                    onChange={(e) => setSupabaseAnonKey(e.target.value)}
                     className="w-full px-2.5 py-1.5 bg-slate-900 border border-slate-800 rounded-lg text-[10px] text-slate-300 focus:outline-none focus:border-cyan-500 font-mono"
                     required
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-[8px] font-bold text-slate-500 uppercase tracking-wider block">
-                    Database Name/ID
-                  </label>
-                  <input
-                    type="text"
-                    value={databaseId}
-                    onChange={(e) => setDatabaseId(e.target.value)}
-                    className="w-full px-2.5 py-1.5 bg-slate-900 border border-slate-800 rounded-lg text-[10px] text-slate-300 focus:outline-none focus:border-cyan-500 font-mono"
-                    required
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-[8px] font-bold text-slate-500 uppercase tracking-wider block">
-                    Collection Name/ID
-                  </label>
-                  <input
-                    type="text"
-                    value={collectionId}
-                    onChange={(e) => setCollectionId(e.target.value)}
-                    className="w-full px-2.5 py-1.5 bg-slate-900 border border-slate-800 rounded-lg text-[10px] text-slate-300 focus:outline-none focus:border-cyan-500 font-mono"
-                    required
+                    placeholder="eyJhbGciOi..."
                   />
                 </div>
 

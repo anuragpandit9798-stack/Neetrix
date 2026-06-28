@@ -6,7 +6,7 @@ import ChecklistSection from './components/ChecklistSection';
 import ErrorNotebook from './components/ErrorNotebook';
 import HistoryDashboard from './components/HistoryDashboard';
 import { Sparkles, ClipboardList, BookOpen, BarChart3, AlertCircle, RefreshCw, CheckCircle2, LogOut, Cloud, CloudOff, Info, Loader2 } from 'lucide-react';
-import { client, account, databases, currentConfig, Query, ID } from './appwrite';
+import { supabase, currentConfig } from './supabase';
 import LoginScreen from './components/LoginScreen';
 
 const INITIAL_MORNING_STUDY: MorningStudyState = {
@@ -76,8 +76,8 @@ export default function App() {
   const [lastSubmittedHours, setLastSubmittedHours] = useState(0);
   const [inputValue, setInputValue] = useState<string>('0');
 
-  // Sync / query from Appwrite databases helper
-  const syncFromAppwrite = async (userId: string) => {
+  // Sync / query from Supabase databases helper
+  const syncFromSupabase = async (userId: string) => {
     if (userId === 'local_user') {
       setDbSyncStatus('offline');
       setDbSyncError(null);
@@ -86,24 +86,23 @@ export default function App() {
     try {
       setDbSyncStatus('synced');
       setDbSyncError(null);
-      const response = await databases.listDocuments(
-        currentConfig.databaseId,
-        currentConfig.collectionId,
-        [
-          Query.equal('userId', userId),
-          Query.orderDesc('date'),
-          Query.limit(100)
-        ]
-      );
+      const { data: documents, error } = await supabase
+        .from('daily_logs')
+        .select('*')
+        .eq('user_id', userId)
+        .order('date', { ascending: false })
+        .limit(100);
 
-      const parsedLogs: DailyLog[] = response.documents.map((doc: any) => {
+      if (error) throw error;
+
+      const parsedLogs: DailyLog[] = (documents || []).map((doc: any) => {
         const totalMcq = doc.mcq || 0;
         const bMcq = Math.floor(totalMcq / 3);
         const pMcq = Math.floor(totalMcq / 3);
         const cMcq = totalMcq - (bMcq + pMcq);
 
         return {
-          id: doc.$id || doc.date,
+          id: doc.id || doc.date,
           date: doc.date,
           studyHours: typeof doc.hours === 'number' ? doc.hours : (parseFloat(doc.hours) || 0),
           morningStudy: {
@@ -140,7 +139,7 @@ export default function App() {
             lightMcqs: false,
           },
           improvementScore: 85,
-          submittedAt: doc.$createdAt || new Date().toISOString(),
+          submittedAt: doc.created_at || new Date().toISOString(),
         };
       });
 
@@ -168,13 +167,13 @@ export default function App() {
         }
       }
     } catch (err: any) {
-      console.warn('Appwrite databases collection query failed (perhaps unconfigured or missing attributes). Falling back to Local Cache: ', err.message);
+      console.warn('Supabase daily_logs query failed. Falling back to Local Cache: ', err.message);
       setDbSyncStatus('error');
-      setDbSyncError(err.message || 'Database neet_tracker or collection daily_logs unconfigured.');
+      setDbSyncError(err.message || 'Database connection unconfigured or daily_logs table missing.');
     }
   };
 
-  // Initialize and load from LocalStorage & check Appwrite session
+  // Initialize and load from LocalStorage & check Supabase session
   useEffect(() => {
     // 1. First load from local storage cache
     try {
@@ -216,7 +215,7 @@ export default function App() {
       console.error('Error loading data from local storage: ', e);
     }
 
-    // 2. Check Appwrite Session status or Offline mode preference
+    // 2. Check Supabase Session status or Offline mode preference
     async function checkSession() {
       const isOfflineMode = localStorage.getItem('neet_tracker_offline_mode') === 'true';
       if (isOfflineMode) {
@@ -231,16 +230,18 @@ export default function App() {
       }
 
       try {
-        // Auto-ping Appwrite backend to verify setup on app open as requested
-        if (typeof (client as any).ping === 'function') {
-          (client as any).ping().catch((pErr: any) => console.log('Appwrite auto-ping on startup failed (expected if local/unconfigured):', pErr));
+        const { data: { session }, error } = await supabase.auth.getSession();
+        if (error) throw error;
+
+        if (session?.user) {
+          const mappedUser = { ...session.user, $id: session.user.id };
+          setUser(mappedUser);
+          await syncFromSupabase(session.user.id);
+        } else {
+          setUser(null);
         }
-        const currentUser = await account.get();
-        setUser(currentUser);
-        // Load cloud documents from databases
-        await syncFromAppwrite(currentUser.$id);
       } catch (err) {
-        console.log('No active Appwrite session or connection offline. Using local mode.');
+        console.log('No active Supabase session or connection offline. Using local mode.');
         setUser(null);
       } finally {
         setUserLoading(false);
@@ -423,7 +424,7 @@ export default function App() {
   };
 
   // FINAL SUBMIT Handler
-  const handleFinalSubmit = () => {
+  const handleFinalSubmit = async () => {
     const todayStr = getTodayString();
     const currentScore = calculateCompletionScore(morningStudy, discipline, classActivity, nightRevision);
     
@@ -455,7 +456,7 @@ export default function App() {
     setShowCelebration(true);
     setAccumulatedSeconds(0); // clear accumulated timer as it is logged
 
-    // Save to Appwrite Database if user is logged in and not in local/offline mode
+    // Save to Supabase Database if user is logged in and not in local/offline mode
     if (user && user.$id !== 'local_user') {
       const totalMcq = dailyPractice.bioMcqs + dailyPractice.physicsMcqs + dailyPractice.chemistryMcqs;
       // Fetch mistakes logged today in the Notebook tab
@@ -464,47 +465,51 @@ export default function App() {
         .map((e) => `[${e.subject}] ${e.topic}: ${e.mistake}`)
         .join('\n') || 'None logged';
 
-      databases.listDocuments(
-        currentConfig.databaseId,
-        currentConfig.collectionId,
-        [
-          Query.equal('userId', user.$id),
-          Query.equal('date', todayStr)
-        ]
-      ).then((existingDocs) => {
+      try {
+        const { data: existingDocs, error: fetchError } = await supabase
+          .from('daily_logs')
+          .select('id')
+          .eq('user_id', user.$id)
+          .eq('date', todayStr);
+
+        if (fetchError) throw fetchError;
+
         const payload = {
-          userId: user.$id,
+          user_id: user.$id,
           date: todayStr,
           hours: studyHrsToday,
           mcq: totalMcq,
           mistakes: todayMistakes
         };
 
-        if (existingDocs.documents.length > 0) {
-          return databases.updateDocument(
-            currentConfig.databaseId,
-            currentConfig.collectionId,
-            existingDocs.documents[0].$id,
-            payload
-          );
+        let saveError;
+        if (existingDocs && existingDocs.length > 0) {
+          const res = await supabase
+            .from('daily_logs')
+            .update({
+              hours: studyHrsToday,
+              mcq: totalMcq,
+              mistakes: todayMistakes
+            })
+            .eq('id', existingDocs[0].id);
+          saveError = res.error;
         } else {
-          return databases.createDocument(
-            currentConfig.databaseId,
-            currentConfig.collectionId,
-            ID.unique(),
-            payload
-          );
+          const res = await supabase
+            .from('daily_logs')
+            .insert([payload]);
+          saveError = res.error;
         }
-      }).then(() => {
-        console.log('✅ Successfully synced with Appwrite Database!');
+
+        if (saveError) throw saveError;
+        console.log('✅ Successfully synced with Supabase Database!');
         setDbSyncStatus('synced');
         setDbSyncError(null);
-      }).catch((err) => {
-        console.error('Appwrite Database Sync Failed:', err);
+      } catch (err: any) {
+        console.error('Supabase Database Sync Failed:', err);
         setDbSyncStatus('error');
-        setDbSyncError(err.message || 'Check database_id, collection_id and attributes on Appwrite dashboard.');
-        alert('⚠️ Checklist saved locally, but Appwrite Cloud Sync failed: ' + (err.message || 'Please verify your Appwrite attributes / credentials.'));
-      });
+        setDbSyncError(err.message || 'Check daily_logs table setup on Supabase dashboard.');
+        alert('⚠️ Checklist saved locally, but Supabase Cloud Sync failed: ' + (err.message || 'Please verify your daily_logs table and credentials.'));
+      }
     }
   };
 
@@ -600,9 +605,9 @@ export default function App() {
     if (confirm('Are you sure you want to log out? Local cache and configurations will be reset.')) {
       try {
         localStorage.removeItem('neet_tracker_offline_mode');
-        // Delete session from Appwrite only if not in local offline mode
+        // Sign out from Supabase only if not in local offline mode
         if (user && user.$id !== 'local_user') {
-          await account.deleteSession('current');
+          await supabase.auth.signOut();
         }
       } catch (err: any) {
         console.error('Logout failed:', err);
@@ -634,7 +639,7 @@ export default function App() {
       <LoginScreen
         onLoginSuccess={(u) => {
           setUser(u);
-          syncFromAppwrite(u.$id);
+          syncFromSupabase(u.$id);
         }}
       />
     );
@@ -721,30 +726,40 @@ export default function App() {
           </div>
         </header>
 
-        {/* Sync Status Guidance Banner if Appwrite fails */}
+        {/* Sync Status Guidance Banner if Supabase fails */}
         {dbSyncStatus === 'error' && (
           <div className="bg-orange-950/20 border border-orange-900/30 p-4 rounded-2xl flex items-start gap-3 text-xs text-slate-300">
             <Info className="w-5 h-5 text-orange-400 shrink-0 mt-0.5 animate-pulse" />
             <div className="space-y-1">
-              <h4 className="font-bold text-white uppercase tracking-wider text-[11px]">⚠️ Cloud Sync Warning (Appwrite Setup Required)</h4>
+              <h4 className="font-bold text-white uppercase tracking-wider text-[11px]">⚠️ Cloud Sync Warning (Supabase Setup Required)</h4>
               <p className="text-slate-400 text-[11px] leading-relaxed">
-                Appwrite API query failed. If you haven't set up the database yet, please log into your Appwrite Console, create a database named <strong>neet_tracker</strong> and a collection named <strong>daily_logs</strong>. Make sure you add these five attributes with exact case:
+                Supabase query failed. If you haven't created the table or configured RLS yet, please go to your Supabase SQL Editor and run:
               </p>
-              <div className="grid grid-cols-2 gap-x-4 gap-y-1 max-w-sm bg-slate-950/60 p-2.5 rounded-lg border border-slate-850 font-mono text-[9px] text-cyan-400 my-2">
-                <div>• userId (string)</div>
-                <div>• date (string)</div>
-                <div>• hours (float)</div>
-                <div>• mcq (integer)</div>
-                <div>• mistakes (string)</div>
-              </div>
+              <pre className="bg-slate-950/60 p-2.5 rounded-lg border border-slate-850 font-mono text-[9px] text-cyan-400 my-2 overflow-x-auto leading-relaxed max-w-lg">
+{`create table daily_logs (
+  id uuid primary key default uuid_generate_v4(),
+  user_id uuid references auth.users(id),
+  date text,
+  hours numeric,
+  mcq integer,
+  mistakes text
+);
+
+alter table daily_logs enable row level security;
+
+create policy "User can access own data"
+on daily_logs
+for all
+using (auth.uid() = user_id);`}
+              </pre>
               <p className="text-slate-500 text-[10px]">
-                Active project configuration: <code className="text-slate-400">{currentConfig.endpoint}</code> (ID: <code className="text-slate-400">{currentConfig.projectId}</code>)
+                Active project configuration: <code className="text-slate-400">{currentConfig.url}</code>
               </p>
               <button
                 onClick={handleLogout}
                 className="mt-1 text-[10px] text-orange-400 hover:text-orange-300 uppercase font-bold tracking-wider underline block"
               >
-                Log Out to Change Appwrite connection endpoints
+                Log Out to Change Supabase connection credentials
               </button>
             </div>
           </div>
